@@ -15,7 +15,6 @@ import {
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// Пароль администратора (измените на свой!)
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin2024';
 
 // Разрешаем CORS для фронтенда
@@ -53,7 +52,7 @@ app.get('/', (req, res) => {
 app.get('/api', (req, res) => {
   res.json({
     name: 'Career Advisor API',
-    version: '1.0.0',
+    version: '1.1.0',
     endpoints: [
       {
         method: 'GET',
@@ -462,6 +461,107 @@ app.get('/api/health', (req, res) => {
     time: new Date().toISOString(),
     version: '1.1.0'
   });
+});
+
+// ============ СТАТИСТИКА ============
+
+const checkAdminAuth = (req, res, next) => {
+  const password = req.headers['x-admin-password'];
+  if (password === ADMIN_PASSWORD) {
+    next();
+  } else {
+    res.status(401).json({ error: 'Неверный пароль администратора' });
+  }
+};
+
+app.get('/api/stats', checkAdminAuth, (req, res) => {
+  try {
+    const stats = getStatistics();
+    const topKeywords = getTopKeywords(10);
+    const topCities = getTopCities(10);
+    
+    res.json({
+      success: true,
+       {
+        ...stats,
+        uniqueUsers: Array.from(stats.uniqueUsers),
+        topKeywords,
+        topCities,
+      }
+    });
+  } catch (error) {
+    console.error('Error getting statistics:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/stats/search', (req, res) => {
+  try {
+    const search = req.body;
+    const userId = req.ip + '_' + (req.headers['user-agent'] || 'unknown');
+    search.userId = userId;
+    
+    const newSearch = addSearchToStats(search);
+    
+    console.log(`📊 Статистика: новый поиск от ${userId}`);
+    
+    res.json({
+      success: true,
+       newSearch
+    });
+  } catch (error) {
+    console.error('Error adding search to stats:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/stats/export', (req, res) => {
+  try {
+    const exportData = req.body;
+    addExportToStats(exportData);
+    
+    console.log(`📊 Статистика: экспорт ${exportData.type}`);
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error adding export to stats:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.delete('/api/stats', checkAdminAuth, (req, res) => {
+  try {
+    clearStatistics();
+    console.log('🗑️ Статистика очищена');
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error clearing statistics:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/stats/export/json', checkAdminAuth, (req, res) => {
+  try {
+    const json = exportStatisticsToJSON();
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename=statistics_${new Date().toISOString().split('T')[0]}.json`);
+    res.send(json);
+  } catch (error) {
+    console.error('Error exporting to JSON:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/stats/export/csv', checkAdminAuth, (req, res) => {
+  try {
+    const csv = exportStatisticsToCSV();
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=statistics_${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csv);
+  } catch (error) {
+    console.error('Error exporting to CSV:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 // ============ СТАРТ СЕРВЕРА ============
